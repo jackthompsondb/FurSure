@@ -7,10 +7,11 @@ pragma solidity ^0.8.27;
 contract FurCoin {
     // initial supply of token
     
-    uint256 supply = 100;
+    uint256 public supply = 100000000;
     string public name; 
     string public symbol;
-    uint8 public decimals;    
+    uint8 decimals = 18;
+
     // Token-related event
     event TokenTransferred(address indexed _from, address indexed _to, uint256 _value);
 
@@ -37,13 +38,22 @@ contract FurCoin {
     mapping(address => address) public petCarer; // Maps a pet to its carer  
     mapping(address => bool) public petAdopted; // Tracks if an address is an adopter
     mapping(address => bool) public petLost;    // Tracks if a pet is lost
+    mapping(address => PetRecord) public petRecords; // Maps a pet to its record
+    
+
+    // pet record structure
+    struct PetRecord {
+        string name;
+        uint256 age;
+        string medicalHistory;
+        bool exists; // To ensure the pet record exists before accessing
+    }
 
 
      // create constructor
-     constructor(string memory _name, string memory _symbol, uint8 _decimals) {
+     constructor(string memory _name, string memory _symbol) {
         name = _name;
         symbol = _symbol;
-        decimals = _decimals;
         balances[msg.sender] = supply;
         roles[msg.sender] = 0;
     }
@@ -69,10 +79,26 @@ contract FurCoin {
         require(roles[msg.sender] == 2, "Only Sponsor Stores can use this function");
         _;
     }
+    modifier onlyAuthorized(address _pet) {
+        require(msg.sender == petOwner[_pet] || msg.sender == petCarer[_pet] || roles[msg.sender] == 3, 
+            "Access restricted to Owner, Carer, or Shelter");
+        _;
+    }
 
-   
+    function mint(address _to, uint256 _amount) public onlyCreator {
+        // Function for the creator to mint new tokens
+        supply += _amount;
+        balances[_to] += _amount;
+        emit TokenTransferred(address(0), _to, _amount);
+    }
 
-    // functions to be implemented 
+    function burn(address _from, uint256 _amount) public onlyCreator {
+        // Function for the creator to burn tokens
+        require(balances[_from] >= _amount, "Insufficient balance to burn");
+        supply -= _amount;
+        balances[_from] -= _amount;
+        emit TokenTransferred(_from, address(0), _amount);
+    }
 
     function assignPermissionedRole(address _address, uint256 _role) public onlyCreator {
         // Function for system manager to assign roles permissioned roles
@@ -90,21 +116,34 @@ contract FurCoin {
         emit PermissionedRoleRevoked(msg.sender, _address, previous_role);
     }
 
-    function totalSupply() public view returns (uint256) {
-        // return total supply of FurCoin
-        return supply;
-    }
+
     function getOwner(address _pet) public onlyVetOrShelter view returns (address) {
         // Function to check the owner of a pet
         return petOwner[_pet];
     }
-    function registerPet(address _pet) public onlyShelter {
-        // Function for Shelters to register a new pet in system
+    function registerPet(address _pet, string memory _name, uint256 _age, string memory _medicalHistory) public onlyShelter {
+        require(!petRecords[_pet].exists, "Pet is already registered");
+        // Function for Shelters to register a new pet
         petOwner[_pet] = msg.sender;
         petAdopted[_pet] = false;
         petRewardLevel[_pet] = 1;
+
+        // Initialize a basic pet record
+        petRecords[_pet] = PetRecord({
+        name: _name,
+        age: _age,
+        medicalHistory: _medicalHistory,
+        exists: true});
+
+        // Emit events for registration and record initialization
         emit PetRegistered(msg.sender, _pet);
     }
+
+    function viewPetRecord(address _pet) public view onlyAuthorized(_pet) returns (PetRecord memory) {
+        require(petRecords[_pet].exists, "Pet record does not exist");
+        return petRecords[_pet];
+    }
+
     function changeRewardLevel(address _pet, uint256 _rewardLevel) public onlyShelter {
         // Function for Shelters to change the reward level of a pet
         petRewardLevel[_pet] = _rewardLevel;
@@ -162,12 +201,12 @@ contract FurCoin {
         balances[petOwner[_pet]] += reward;
         emit TokenTransferred(msg.sender, petOwner[_pet], reward);
     }
-    function spentReward(address _owner, uint256 _value) public onlySponsor {
+    function spendReward(address _owner, uint256 _value) public onlySponsor {
         // Function for Owners to spend their token rewards
         require(balances[_owner] >= _value, "Insufficient balance");
         supply -= _value;
         balances[_owner] -= _value;
-
+        emit TokenTransferred(_owner, address(0), _value);
     }
     function transferCoin(address _to, uint256 _value) public {
         // Function for Owners to transfer tokens to another address
