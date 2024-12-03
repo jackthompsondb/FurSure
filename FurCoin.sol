@@ -144,6 +144,14 @@ contract FurCoin {
         return petRecords[_pet];
     }
 
+    function amendPetRecord(address _pet, string memory _name, uint256 _age, string memory _medicalHistory) public onlyVetOrShelter {
+        require(petRecords[_pet].exists, "Pet record does not exist");
+        // Function for Vets to amend a pet's record
+        petRecords[_pet].name = _name;
+        petRecords[_pet].age = _age;
+        petRecords[_pet].medicalHistory = _medicalHistory;
+    }
+
     function changeRewardLevel(address _pet, uint256 _rewardLevel) public onlyShelter {
         // Function for Shelters to change the reward level of a pet
         petRewardLevel[_pet] = _rewardLevel;
@@ -208,7 +216,7 @@ contract FurCoin {
         balances[_owner] -= _value;
         emit TokenTransferred(_owner, address(0), _value);
     }
-    function transferCoin(address _to, uint256 _value) public {
+    function transfer(address _to, uint256 _value) public {
         // Function for Owners to transfer tokens to another address
         require(balances[msg.sender] >= _value, "Insufficient balance");
         balances[msg.sender] -= _value;
